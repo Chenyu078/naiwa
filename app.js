@@ -321,6 +321,7 @@ function loop() {
         const map = {};
         for (const c of cats) map[c.categoryName] = c.score;
         faceB = detectFace(map);
+        faceSnap = { v: faceB, t: performance.now() };
       } else {
         faceMissingFrames++;
       }
@@ -340,9 +341,11 @@ function handleInput(gesture, faceB) {
 
   if (gesture && HAND_MAP[gesture]) {
     candidate = { kind: 'hand', key: gesture, img: HAND_MAP[gesture].img, text: '手势 · ' + HAND_MAP[gesture].label };
-  } else if (faceB && useFace) {
-    for (const f of FACE_MAP) {
-      if (faceB[f.key] >= f.th) {
+  } else if (useFace) {
+    // 表情检测隔帧运行，用 300ms 内的快照兜住，否则保持计时每帧被清零
+    const fv = faceB || (faceSnap && now - faceSnap.t < 300 ? faceSnap.v : null);
+    if (fv) for (const f of FACE_MAP) {
+      if (fv[f.key] >= f.th) {
         candidate = { kind: 'face', key: f.key, img: f.img, text: '表情 · ' + f.label };
         break;
       }
@@ -372,6 +375,7 @@ function handleInput(gesture, faceB) {
 
 /* ================= 顶部标签 ================= */
 let lastFaceB = null;
+let faceSnap = null;   // { v, t } 最近一次表情结果，避免隔帧丢失
 function drawPills(gesture, faceB) {
   if (faceB) lastFaceB = faceB;
   if (useFace && faceState === 'idle' && stream) initFace().catch(() => {});
