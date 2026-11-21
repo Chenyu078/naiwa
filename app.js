@@ -1,13 +1,21 @@
 import { FilesetResolver, HandLandmarker, FaceLandmarker } from "./vendor/vision_bundle.js";
 
-const WASM_DIR = "./vendor/wasm";
-const MODEL_HAND = "./vendor/models/hand_landmarker.task";
-const MODEL_FACE = "./vendor/models/face_landmarker.task";
+const CDN = "https://cdn.jsdelivr.net";
+const WASM_DIRS = [
+  CDN + "/npm/@mediapipe/tasks-vision@0.10.14/wasm",
+  "./vendor/wasm",
+];
+const MODEL_HAND_URLS = [
+  CDN + "/gh/Chenyu078/naiwa@main/vendor/models/hand_landmarker.task",
+  "./vendor/models/hand_landmarker.task",
+];
+const MODEL_FACE_URLS = [
+  CDN + "/gh/Chenyu078/naiwa@main/vendor/models/face_landmarker.task",
+  "./vendor/models/face_landmarker.task",
+];
 
-try{localStorage.setItem("st","1:import ok")}catch(e){}
 const $ = id => document.getElementById(id);
 
-try{localStorage.setItem("st","2:before MEMES")}catch(e){}
 /* ================= 素材与映射 ================= */
 const MEMES = [1,2,3,4,5,6,7,8,9,10,11,12,13].map(n => `jpg/${String(n).padStart(2,'0')}.jpg`);
 
@@ -153,27 +161,48 @@ function setProg(text, pct) {
   else { fill.classList.remove('indet'); fill.style.width = Math.max(2, Math.min(100, pct)) + '%'; }
 }
 
-async function fetchModel(url, label) {
-  const res = await fetch(url, { cache: 'force-cache' });
-  if (!res.ok) throw new Error(label + ' 下载失败 ' + res.status);
-  const total = Number(res.headers.get('content-length') || 0);
-  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+async function fetchModel(urls, label) {
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: 'force-cache' });
+      if (!res.ok) { lastErr = new Error(label + ' ' + res.status); continue; }
+      const total = Number(res.headers.get('content-length') || 0);
+      if (!res.body) return new Uint8Array(await res.arrayBuffer());
 
-  const reader = res.body.getReader();
-  const chunks = [];
-  let got = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    got += value.length;
-    if (total) setProg(`下载${label} ${(got/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`, got/total*100);
-    else setProg(`下载${label} ${(got/1048576).toFixed(1)} MB`, null);
+      const reader = res.body.getReader();
+      const chunks = [];
+      let got = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        got += value.length;
+        if (total) setProg(`下载${label} ${(got/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`, got/total*100);
+        else setProg(`下载${label} ${(got/1048576).toFixed(1)} MB`, null);
+      }
+      if (got < 100000) throw new Error(label + ' 内容异常');
+      const buf = new Uint8Array(got);
+      let off = 0;
+      for (const c of chunks) { buf.set(c, off); off += c.length; }
+      return buf;
+    } catch (e) { lastErr = e; }
   }
-  const buf = new Uint8Array(got);
-  let off = 0;
-  for (const c of chunks) { buf.set(c, off); off += c.length; }
-  return buf;
+  throw lastErr || new Error(label + ' 下载失败');
+}
+
+/* 探测 wasm 目录是否可用 */
+async function pickWasmDir() {
+  for (const dir of WASM_DIRS) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch(dir + '/vision_wasm_internal.js', { method: 'GET', headers: { Range: 'bytes=0-255' }, signal: ctrl.signal });
+      clearTimeout(timer);
+      if (r.ok) return dir;
+    } catch (e) { /* 试下一个 */ }
+  }
+  return WASM_DIRS[WASM_DIRS.length - 1];
 }
 
 /* ================= 初始化模型 ================= */
@@ -183,14 +212,15 @@ let fileset = null, faceLoading = null, ready = false;
 async function initWasm() {
   if (fileset) return fileset;
   setProg('加载识别运行库（首次约 9 MB）…', null);
-  fileset = await FilesetResolver.forVisionTasks(WASM_DIR);
+  const dir = await pickWasmDir();
+  fileset = await FilesetResolver.forVisionTasks(dir);
   return fileset;
 }
 
 async function initHand() {
   if (handLandmarker) return handLandmarker;
   await initWasm();
-  const buf = await fetchModel(MODEL_HAND, '手势模型');
+  const buf = await fetchModel(MODEL_HAND_URLS, '手势模型');
   setProg('初始化手势模型…', null);
   handLandmarker = await HandLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetBuffer: buf, delegate: 'GPU' },
@@ -210,7 +240,7 @@ async function initFace() {
   if (faceLoading) return faceLoading;
   faceLoading = (async () => {
     await initWasm();
-    const buf = await fetchModel(MODEL_FACE, '表情模型');
+    const buf = await fetchModel(MODEL_FACE_URLS, '表情模型');
     faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetBuffer: buf, delegate: 'GPU' },
       runningMode: 'VIDEO',
@@ -491,14 +521,12 @@ $('shootBtn').addEventListener('click', () => {
   ).join('');
 })();
 
-try{localStorage.setItem("st","3:before preload")}catch(e){}
 /* 预加载图片 */
 MEMES.forEach(src => { const i = new Image(); i.src = src; });
 camWrap.classList.add('mirror');
 setImage(IDLE_IMG, true);
 
 /* 页面隐藏时暂停 */
-try{localStorage.setItem("st","4:end")}catch(e){}
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { cancelAnimationFrame(rafId); }
   else if (stream) loop();
