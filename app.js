@@ -17,28 +17,28 @@ const MODEL_FACE_URLS = [
 const $ = id => document.getElementById(id);
 
 /* ================= 素材与映射 ================= */
-const MEMES = [1,2,3,4,5,6,7,8,9,10,11,12,13].map(n => `jpg/${String(n).padStart(2,'0')}.jpg`);
+const MEMES = [1,2,3,4,5,6,7,8,9,10,11,12,13].map(n => `jpg2/${String(n).padStart(2,'0')}.jpg`);
 
 // 手势 → 图片序号（1 起）
 const HAND_MAP = {
-  thumbs_up:  { img: 1,  label: '点赞' },
-  fist:       { img: 2,  label: '握拳' },
-  open_palm:  { img: 3,  label: '张开手掌' },
-  point_up:   { img: 4,  label: '食指朝上' },
-  peace:      { img: 11, label: '剪刀手' },
-  rock:       { img: 6,  label: '摇滚' },
-  ok:         { img: 7,  label: 'OK' },
+  point_up:   { img: 1,  label: '食指朝上（嘘）' },
+  open_palm:  { img: 4,  label: '张开手掌' },
+  thumbs_up:  { img: 10, label: '点赞' },
+  fist:       { img: 7,  label: '握拳' },
+  peace:      { img: 13, label: '剪刀手' },
+  rock:       { img: 2,  label: '摇滚' },
+  ok:         { img: 11, label: 'OK' },
 };
 
 // 表情 → 图片序号
 const FACE_MAP = [
-  { key: 'mouthOpen', th: 0.30, img: 13, label: '张嘴' },
-  { key: 'smile',     th: 0.30, img: 11, label: '微笑' },
-  { key: 'eyeClose',  th: 0.45, img: 10, label: '闭眼' },
-  { key: 'browUp',    th: 0.40, img: 9,  label: '挑眉' },
+  { key: 'mouthOpen', th: 0.30, img: 3,  label: '张嘴' },
+  { key: 'smile',     th: 0.30, img: 6,  label: '微笑' },
+  { key: 'eyeClose',  th: 0.45, img: 9,  label: '闭眼' },
+  { key: 'browUp',    th: 0.40, img: 12, label: '挑眉' },
 ];
 
-const IDLE_IMG = 8;      // 无输入时的默认图
+const IDLE_IMG = 5;      // 无输入时的默认图
 const HOLD_MS = 600;     // 手势需保持多久
 const FACE_HOLD_MS = 320; // 表情保持时间（表情停留短）
 const IDLE_MS = 1400;    // 无输入多久后回默认
@@ -73,6 +73,8 @@ function setImage(idx, force) {
   const img = new Image();
   img.onload = () => {
     meme.src = img.src;
+    const bg = $('bgimg');
+    if (bg) bg.style.backgroundImage = `url("${img.src}")`;
     requestAnimationFrame(() => meme.classList.remove('swap'));
   };
   img.src = MEMES[idx - 1];
