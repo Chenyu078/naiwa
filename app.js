@@ -28,6 +28,7 @@ const HAND_MAP = {
   peace:      { img: 13, label: '剪刀手' },
   rock:       { img: 2,  label: '摇滚' },
   ok:         { img: 11, label: 'OK' },
+  L_shape:    { img: 8,  label: 'L 形手势' },
 };
 
 // 表情 → 图片序号
@@ -124,6 +125,9 @@ function detectGesture(lm) {
 
   // 剪刀手：食指+中指，其余收
   if (f.index && f.middle && !f.ring && !f.pinky) return 'peace';
+
+  // L 形：拇指 + 食指张开，其余收（优先于「食指朝上」）
+  if (f.thumb && f.index && !f.middle && !f.ring && !f.pinky) return 'L_shape';
 
   // 食指朝上：只有食指
   if (f.index && !f.middle && !f.ring && !f.pinky) return 'point_up';
