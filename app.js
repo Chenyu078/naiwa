@@ -32,14 +32,15 @@ const HAND_MAP = {
 
 // 表情 → 图片序号
 const FACE_MAP = [
-  { key: 'mouthOpen', th: 0.45, img: 13, label: '张嘴（惊讶）' },
-  { key: 'smile',     th: 0.42, img: 11, label: '微笑（欢呼）' },
-  { key: 'eyeClose',  th: 0.55, img: 10, label: '闭眼（睡着）' },
-  { key: 'browUp',    th: 0.45, img: 9,  label: '挑眉（疑惑）' },
+  { key: 'mouthOpen', th: 0.30, img: 13, label: '张嘴' },
+  { key: 'smile',     th: 0.30, img: 11, label: '微笑' },
+  { key: 'eyeClose',  th: 0.45, img: 10, label: '闭眼' },
+  { key: 'browUp',    th: 0.40, img: 9,  label: '挑眉' },
 ];
 
 const IDLE_IMG = 8;      // 无输入时的默认图
-const HOLD_MS = 600;     // 需保持多久才切换
+const HOLD_MS = 600;     // 手势需保持多久
+const FACE_HOLD_MS = 320; // 表情保持时间（表情停留短）
 const IDLE_MS = 1400;    // 无输入多久后回默认
 
 /* ================= 元素 ================= */
@@ -208,6 +209,8 @@ async function pickWasmDir() {
 /* ================= 初始化模型 ================= */
 let handLandmarker = null, faceLandmarker = null;
 let fileset = null, faceLoading = null, ready = false;
+let faceState = 'idle';   // idle | loading | ready | error
+let faceErr = '';
 
 async function initWasm() {
   if (fileset) return fileset;
@@ -252,8 +255,11 @@ async function initFace() {
       numFaces: 1,
       outputFaceBlendshapes: true,
     }));
+    faceState = 'ready';
     return faceLandmarker;
   })();
+  faceState = 'loading';
+  faceLoading.catch(e => { faceState = 'error'; faceErr = String(e && e.message || e).slice(0, 40); });
   return faceLoading;
 }
 
@@ -346,7 +352,7 @@ function handleInput(gesture, faceB) {
   if (candidate) {
     if (!pending || pending.img !== candidate.img) {
       pending = { ...candidate, since: now };
-    } else if (now - pending.since >= HOLD_MS) {
+    } else if (now - pending.since >= (pending.kind === 'face' ? FACE_HOLD_MS : HOLD_MS)) {
       setImage(pending.img);
       lastHitAt = now;
       if (pending.text !== lastText) { camTag.textContent = pending.text; lastText = pending.text; }
@@ -365,7 +371,10 @@ function handleInput(gesture, faceB) {
 }
 
 /* ================= 顶部标签 ================= */
+let lastFaceB = null;
 function drawPills(gesture, faceB) {
+  if (faceB) lastFaceB = faceB;
+  if (useFace && faceState === 'idle' && stream) initFace().catch(() => {});
   if (gesture && HAND_MAP[gesture]) {
     pillHand.textContent = '手势 ' + HAND_MAP[gesture].label;
     pillHand.classList.add('hit');
@@ -373,13 +382,32 @@ function drawPills(gesture, faceB) {
     pillHand.textContent = '手势 —';
     pillHand.classList.remove('hit');
   }
-  if (faceB) {
-    let best = null;
-    for (const f of FACE_MAP) {
-      if (faceB[f.key] >= f.th) { best = f; break; }
+  // 表情状态
+  if (!useFace) {
+    pillFace.textContent = '表情 已关闭';
+    pillFace.classList.remove('hit');
+  } else if (faceState === 'loading') {
+    pillFace.textContent = '表情 模型加载中';
+    pillFace.classList.remove('hit');
+  } else if (faceState === 'error') {
+    pillFace.textContent = '表情 模型失败';
+    pillFace.classList.remove('hit');
+  } else if (faceState === 'ready') {
+    if (!lastFaceB) {
+      pillFace.textContent = '表情 未检测到人脸';
+      pillFace.classList.remove('hit');
+    } else if (showDebug) {
+      const b = lastFaceB;
+      pillFace.textContent = `嘴${b.mouthOpen.toFixed(2)} 笑${b.smile.toFixed(2)} 闭${b.eyeClose.toFixed(2)} 眉${b.browUp.toFixed(2)}`;
+      pillFace.classList.add('hit');
+    } else {
+      let best = null;
+      for (const f of FACE_MAP) if (lastFaceB[f.key] >= f.th) { best = f; break; }
+      if (best) { pillFace.textContent = '表情 ' + best.label; pillFace.classList.add('hit'); }
+      else { pillFace.textContent = '表情 —'; pillFace.classList.remove('hit'); }
     }
-    if (best) { pillFace.textContent = '表情 ' + best.label.split('（')[0]; pillFace.classList.add('hit'); }
-    else { pillFace.textContent = '表情 —'; pillFace.classList.remove('hit'); }
+  } else {
+    pillFace.textContent = '表情 —';
   }
 }
 
@@ -508,6 +536,13 @@ $('shootBtn').addEventListener('click', () => {
     toast('已保存');
   };
   base.src = MEMES[currentImg - 1];
+});
+
+pillFace.style.pointerEvents = 'auto';
+pillFace.addEventListener('click', () => {
+  if (!useFace) { $('optFace').checked = true; useFace = true; }
+  if (faceState === 'error') { faceState = 'idle'; faceLoading = null; faceLandmarker = null; }
+  if (faceState === 'idle') { toast('重新加载表情模型…'); initFace().then(() => toast('表情识别已就绪')).catch(e => toast('加载失败：' + (e.message || e))); }
 });
 
 /* ================= 图例 ================= */
