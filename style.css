@@ -120,3 +120,12 @@ body{
   .meme{max-width:min(100%, 820px);}
   .cam{width:190px;}
 }
+
+/* 加载进度 */
+.prog{margin:6px 0 4px;}
+.prog[hidden]{display:none;}
+.prog-bar{height:6px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden;}
+.prog-bar i{display:block;height:100%;width:0;background:#f2c94c;border-radius:99px;transition:width .2s linear;}
+.prog-bar i.indet{animation:indet 1.2s ease-in-out infinite;}
+@keyframes indet{0%{width:12%}50%{width:82%}100%{width:12%}}
+.prog-txt{font-size:11.5px;color:#8a97a3;margin-top:7px;text-align:center;}

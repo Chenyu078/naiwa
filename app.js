@@ -1,8 +1,13 @@
-import { FilesetResolver, HandLandmarker, FaceLandmarker }
-  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+import { FilesetResolver, HandLandmarker, FaceLandmarker } from "./vendor/vision_bundle.js";
 
+const WASM_DIR = "./vendor/wasm";
+const MODEL_HAND = "./vendor/models/hand_landmarker.task";
+const MODEL_FACE = "./vendor/models/face_landmarker.task";
+
+try{localStorage.setItem("st","1:import ok")}catch(e){}
 const $ = id => document.getElementById(id);
 
+try{localStorage.setItem("st","2:before MEMES")}catch(e){}
 /* ================= 素材与映射 ================= */
 const MEMES = [1,2,3,4,5,6,7,8,9,10,11,12,13].map(n => `jpg/${String(n).padStart(2,'0')}.jpg`);
 
@@ -138,41 +143,88 @@ function detectFace(bs) {
   return { mouthOpen, smile, eyeClose, browUp };
 }
 
-/* ================= 初始化模型 ================= */
-let handLandmarker = null, faceLandmarker = null, ready = false;
+/* ================= 加载进度 ================= */
+function setProg(text, pct) {
+  const box = $('prog'), fill = $('progFill'), txt = $('progTxt');
+  if (!box) return;
+  box.hidden = false;
+  txt.textContent = text;
+  if (pct == null) { fill.style.width = '100%'; fill.classList.add('indet'); }
+  else { fill.classList.remove('indet'); fill.style.width = Math.max(2, Math.min(100, pct)) + '%'; }
+}
 
-async function initModels() {
-  const fileset = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-  );
-  const opts = {
-    baseOptions: { delegate: "GPU" },
-    runningMode: "VIDEO",
-    numHands: 1,
-  };
-  try {
-    handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-      ...opts,
-      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate: "GPU" },
-    });
-    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
-      ...opts,
-      outputFaceBlendshapes: true,
-      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
-    });
-  } catch (e) {
-    // GPU 失败时退回 CPU
-    handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-      ...opts,
-      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate: "CPU" },
-    });
-    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
-      ...opts,
-      outputFaceBlendshapes: true,
-      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "CPU" },
-    });
+async function fetchModel(url, label) {
+  const res = await fetch(url, { cache: 'force-cache' });
+  if (!res.ok) throw new Error(label + ' 下载失败 ' + res.status);
+  const total = Number(res.headers.get('content-length') || 0);
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    if (total) setProg(`下载${label} ${(got/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`, got/total*100);
+    else setProg(`下载${label} ${(got/1048576).toFixed(1)} MB`, null);
   }
+  const buf = new Uint8Array(got);
+  let off = 0;
+  for (const c of chunks) { buf.set(c, off); off += c.length; }
+  return buf;
+}
+
+/* ================= 初始化模型 ================= */
+let handLandmarker = null, faceLandmarker = null;
+let fileset = null, faceLoading = null, ready = false;
+
+async function initWasm() {
+  if (fileset) return fileset;
+  setProg('加载识别运行库（首次约 9 MB）…', null);
+  fileset = await FilesetResolver.forVisionTasks(WASM_DIR);
+  return fileset;
+}
+
+async function initHand() {
+  if (handLandmarker) return handLandmarker;
+  await initWasm();
+  const buf = await fetchModel(MODEL_HAND, '手势模型');
+  setProg('初始化手势模型…', null);
+  handLandmarker = await HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetBuffer: buf, delegate: 'GPU' },
+    runningMode: 'VIDEO',
+    numHands: 1,
+  }).catch(async () => HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetBuffer: buf, delegate: 'CPU' },
+    runningMode: 'VIDEO',
+    numHands: 1,
+  }));
   ready = true;
+  return handLandmarker;
+}
+
+async function initFace() {
+  if (faceLandmarker) return faceLandmarker;
+  if (faceLoading) return faceLoading;
+  faceLoading = (async () => {
+    await initWasm();
+    const buf = await fetchModel(MODEL_FACE, '表情模型');
+    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetBuffer: buf, delegate: 'GPU' },
+      runningMode: 'VIDEO',
+      numFaces: 1,
+      outputFaceBlendshapes: true,
+    }).catch(async () => FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetBuffer: buf, delegate: 'CPU' },
+      runningMode: 'VIDEO',
+      numFaces: 1,
+      outputFaceBlendshapes: true,
+    }));
+    return faceLandmarker;
+  })();
+  return faceLoading;
 }
 
 /* ================= 摄像头 ================= */
@@ -197,7 +249,7 @@ async function startCamera() {
     camTag.textContent = '识别中';
     loop();
   } catch (e) {
-    $('coverTip').textContent = '无法开启摄像头：' + (e.message || e) + '（需 HTTPS 并允许权限）';
+    throw new Error('无法开启摄像头：' + (e.message || e) + '（需 HTTPS 并允许权限）');
   }
 }
 
@@ -339,17 +391,28 @@ function drawHand(lm) {
 
 /* ================= 交互绑定 ================= */
 $('startBtn').addEventListener('click', async () => {
-  $('startBtn').disabled = true;
-  $('startBtn').textContent = '加载模型中…';
+  const btn = $('startBtn');
+  btn.disabled = true;
+  btn.textContent = '准备中…';
+  $('coverTip').textContent = '首次需下载约 17 MB 识别资源，之后会缓存。';
   try {
-    if (!ready) await initModels();
+    await initHand();
+    setProg('请求摄像头权限…', null);
+    await startCamera();
+    $('prog').hidden = true;
+    btn.textContent = '重新开启';
+    btn.disabled = false;
+    // 表情模型空闲时后台加载，不阻塞使用
+    if (useFace) {
+      setTimeout(() => initFace().catch(() => {}), 1200);
+    }
   } catch (e) {
-    $('coverTip').textContent = '模型加载失败：' + (e.message || e) + '（请检查网络后重试）';
-    $('startBtn').disabled = false;
-    $('startBtn').textContent = '重试';
-    return;
+    const msg = String(e && e.message || e);
+    $('coverTip').textContent = '加载失败：' + msg + '。请检查网络后重试。';
+    $('prog').hidden = true;
+    btn.disabled = false;
+    btn.textContent = '重试';
   }
-  await startCamera();
 });
 
 $('demoBtn').addEventListener('click', () => {
@@ -361,7 +424,13 @@ $('demoBtn').addEventListener('click', () => {
 });
 
 $('optHand').addEventListener('change', e => { useHand = e.target.checked; });
-$('optFace').addEventListener('change', e => { useFace = e.target.checked; });
+$('optFace').addEventListener('change', e => {
+  useFace = e.target.checked;
+  if (useFace && !faceLandmarker) {
+    toast('正在加载表情模型…');
+    initFace().then(() => toast('表情识别已就绪')).catch(() => toast('表情模型加载失败'));
+  }
+});
 $('optMirror').addEventListener('change', e => {
   mirror = e.target.checked;
   camWrap.classList.toggle('mirror', mirror);
@@ -422,12 +491,14 @@ $('shootBtn').addEventListener('click', () => {
   ).join('');
 })();
 
+try{localStorage.setItem("st","3:before preload")}catch(e){}
 /* 预加载图片 */
 MEMES.forEach(src => { const i = new Image(); i.src = src; });
 camWrap.classList.add('mirror');
 setImage(IDLE_IMG, true);
 
 /* 页面隐藏时暂停 */
+try{localStorage.setItem("st","4:end")}catch(e){}
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { cancelAnimationFrame(rafId); }
   else if (stream) loop();

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101418">
 <title>奶蛙 · 手势放映机</title>
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -38,6 +38,10 @@
         <p class="cover-sub">开启摄像头，做手势或表情，奶蛙会给你反应。</p>
         <button class="btn primary" id="startBtn">开启摄像头</button>
         <button class="btn ghost" id="demoBtn">先看演示（不开摄像头）</button>
+        <div class="prog" id="prog" hidden>
+          <div class="prog-bar"><i id="progFill"></i></div>
+          <div class="prog-txt" id="progTxt"></div>
+        </div>
         <p class="cover-tip" id="coverTip">画面只在本机处理，不会上传任何服务器。</p>
       </div>
     </div>
@@ -74,6 +78,6 @@
 
 <div class="toast" id="toast"></div>
 
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=17"></script>
 </body>
 </html>
