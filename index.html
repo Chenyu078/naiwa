@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#101418">
+<title>奶蛙 · 手势放映机</title>
+<link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+<div class="app">
+  <!-- 主舞台 -->
+  <div class="stage" id="stage">
+    <img class="meme" id="meme" src="img/01.webp" alt="奶蛙">
+
+    <!-- 摄像头小窗 -->
+    <div class="cam" id="camWrap">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+      <div class="cam-tag" id="camTag">待机</div>
+    </div>
+
+    <!-- 顶部信息 -->
+    <div class="topbar">
+      <div class="brand">奶蛙放映机</div>
+      <div class="pills">
+        <span class="pill" id="pillHand">手势 —</span>
+        <span class="pill" id="pillFace">表情 —</span>
+      </div>
+    </div>
+
+    <!-- 开始遮罩 -->
+    <div class="cover" id="cover">
+      <div class="cover-inner">
+        <div class="cover-title">奶蛙放映机</div>
+        <p class="cover-sub">开启摄像头，做手势或表情，奶蛙会给你反应。</p>
+        <button class="btn primary" id="startBtn">开启摄像头</button>
+        <button class="btn ghost" id="demoBtn">先看演示（不开摄像头）</button>
+        <p class="cover-tip" id="coverTip">画面只在本机处理，不会上传任何服务器。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 控制条 -->
+  <div class="controls">
+    <label class="switch">
+      <input type="checkbox" id="optHand" checked>
+      <span>手势</span>
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="optFace" checked>
+      <span>表情</span>
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="optMirror" checked>
+      <span>镜像</span>
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="optDebug">
+      <span>骨骼</span>
+    </label>
+    <button class="btn tiny" id="switchCam">切换镜头</button>
+    <button class="btn tiny" id="shootBtn">留影</button>
+  </div>
+
+  <!-- 映射说明 -->
+  <details class="legend">
+    <summary>手势 / 表情 对照表</summary>
+    <div class="legend-grid" id="legendGrid"></div>
+  </details>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="app.js?v=3"></script>
+</body>
+</html>
